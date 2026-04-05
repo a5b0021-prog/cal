@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="icon.png">
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js');
+  }
+</script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>套利對沖計算器</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+
+        :root {
+            --bg-color: #f5f4f0;
+            --card-bg: #ffffff;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --border-color: #e2e8f0;
+            --poly-color: #2563eb;
+            --hkjc-color: #ea580c;
+            --macau-color: #9333ea;
+            --positive: #10b981;
+            --negative: #ef4444;
+            --input-bg: #f8fafc;
+            --auto-bg: #f1f5f9;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            padding: 40px 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container { max-width: 960px; width: 100%; }
+
+        .top-bar {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            margin-bottom: 28px;
+            flex-wrap: wrap;
+        }
+
+        .mode-selector {
+            display: flex;
+            background: var(--border-color);
+            border-radius: 12px;
+            padding: 5px;
+            flex: 1;
+            min-width: 280px;
+        }
+
+        .mode-btn {
+            flex: 1;
+            padding: 13px;
+            border: none;
+            background: transparent;
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+
+        .mode-btn.active {
+            background: var(--card-bg);
+            color: var(--text-main);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .fx-box {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 10px 18px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            white-space: nowrap;
+        }
+
+        .fx-box label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .fx-box input {
+            width: 80px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 8px 10px;
+            font-family: 'Space Mono', monospace;
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--text-main);
+            background: var(--input-bg);
+            text-align: center;
+        }
+
+        .fx-box input:focus { outline: none; border-color: var(--text-muted); }
+
+        .cards-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            margin-bottom: 28px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 26px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.03);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 16px;
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        .card.poly  .card-header { border-bottom-color: var(--poly-color); }
+        .card.hkjc  .card-header { border-bottom-color: var(--hkjc-color); }
+        .card.macau .card-header { border-bottom-color: var(--macau-color); }
+
+        .platform-name { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.5px; }
+        .card.poly  .platform-name { color: var(--poly-color); }
+        .card.hkjc  .platform-name { color: var(--hkjc-color); }
+        .card.macau .platform-name { color: var(--macau-color); }
+
+        .currency-badge {
+            background: var(--bg-color);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        .input-group { display: flex; flex-direction: column; gap: 8px; }
+        .input-row { display: flex; gap: 14px; }
+        .input-row .input-group { flex: 1; }
+
+        label {
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        input[type=number] {
+            width: 100%;
+            background: var(--input-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 13px 16px;
+            font-family: 'Space Mono', monospace;
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--text-main);
+            transition: all 0.2s ease;
+        }
+
+        input[type=number]:focus {
+            outline: none;
+            border-color: var(--text-muted);
+            box-shadow: 0 0 0 3px rgba(0,0,0,0.05);
+        }
+
+        input.auto-filled {
+            background: var(--auto-bg);
+            color: var(--text-muted);
+            border-color: transparent;
+        }
+
+        .fee-info {
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 8px;
+            padding: 10px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            font-size: 0.82rem;
+            color: #1d4ed8;
+        }
+
+        .fee-info .fee-row {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .fee-info strong { font-family: 'Space Mono', monospace; }
+
+        .round-note {
+            background: #faf5ff;
+            border: 1px solid #e9d5ff;
+            border-radius: 8px;
+            padding: 8px 14px;
+            font-size: 0.8rem;
+            color: #7e22ce;
+            text-align: center;
+        }
+
+        .results-panel {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.03);
+        }
+
+        .result-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0;
+        }
+
+        .result-item {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .result-item:nth-child(odd)  { border-right: 1px solid var(--border-color); }
+        .result-item.full-width { grid-column: 1 / -1; }
+        .result-item.highlight { background: #f8fafc; border-radius: 0 0 16px 16px; }
+
+        .res-label {
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+
+        .res-value {
+            font-family: 'Space Mono', monospace;
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        .res-value.positive { color: var(--positive); }
+        .res-value.negative { color: var(--negative); }
+        .res-value.large    { font-size: 2rem; }
+
+        .fx-footnote {
+            text-align: center;
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            margin-top: 14px;
+        }
+
+        @media (max-width: 640px) {
+            .cards-grid    { grid-template-columns: 1fr; }
+            .result-grid   { grid-template-columns: 1fr; }
+            .result-item:nth-child(odd) { border-right: none; }
+            .result-item.full-width { grid-column: 1; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <div class="top-bar">
+        <div class="mode-selector">
+            <button id="mode-ph" class="mode-btn active">POLYMARKET vs HKJC</button>
+            <button id="mode-hm" class="mode-btn">HKJC vs MACAU</button>
+        </div>
+        <div class="fx-box">
+            <label>1 USD =</label>
+            <input type="number" id="fx-rate" value="7.775" step="0.01" min="1">
+            <label>HKD</label>
+        </div>
+    </div>
+
+    <div class="cards-grid">
+
+        <!-- POLY card -->
+        <div id="card-poly" class="card poly">
+            <div class="card-header">
+                <!-- 這裡加入了免手續費的勾選框 -->
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <span class="platform-name">POLYMARKET</span>
+                    <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; text-transform: none; margin: 0;">
+                        <input type="checkbox" id="poly-free-fee" style="width: 14px; height: 14px; cursor: pointer; accent-color: var(--poly-color);">
+                        <span style="font-size: 0.8rem; color: var(--poly-color); font-weight: 600;">免手續費</span>
+                    </label>
+                </div>
+                <span class="currency-badge">USD</span>
+            </div>
+
+            <div class="input-row">
+                <div class="input-group">
+                    <label>美分 (c)</label>
+                    <input type="number" id="poly-cents" value="50" step="0.1" min="0.1" max="99.9">
+                </div>
+                <div class="input-group">
+                    <label>Decimal Odds</label>
+                    <input type="number" id="poly-odds" value="2.00" step="0.01" min="1.01">
+                </div>
+            </div>
+
+            <div class="fee-info">
+                <div class="fee-row">
+                    <span>費率：<strong id="poly-fee-disp">0.000</strong>%</span>
+                    <span>淨賠率：<strong id="poly-net-disp">0.0000</strong></span>
+                </div>
+                <div class="fee-row">
+                    <span>每 $100 手續費：<strong id="poly-fee-usd-disp">$0.00</strong> USD</span>
+                    <span>Shares：<strong id="poly-shares-disp">0.00</strong></span>
+                </div>
+            </div>
+
+            <div class="input-group">
+                <label>投注金額 (USD)</label>
+                <input type="number" id="poly-bet" value="100" step="10" min="1">
+            </div>
+        </div>
+
+        <!-- HKJC card -->
+        <div id="card-hkjc" class="card hkjc">
+            <div class="card-header">
+                <span class="platform-name">HKJC</span>
+                <span class="currency-badge">HKD</span>
+            </div>
+
+            <div class="input-group">
+                <label>Decimal Odds</label>
+                <input type="number" id="hkjc-odds" value="2.00" step="0.01" min="1.01">
+            </div>
+
+            <div class="input-group">
+                <label>投注金額 (HKD) — 已歸整</label>
+                <input type="number" id="hkjc-bet" class="auto-filled" step="1" min="1" placeholder="自動計算">
+            </div>
+
+            <div class="round-note" id="hkjc-round-note" style="display:none;">
+                四捨五入歸整：計算值 <strong id="hkjc-raw-val">—</strong> HKD → 取整 <strong id="hkjc-rounded-val">—</strong> HKD
+            </div>
+        </div>
+
+        <!-- MACAU card -->
+        <div id="card-macau" class="card macau" style="display:none;">
+            <div class="card-header">
+                <span class="platform-name">MACAU</span>
+                <span class="currency-badge">HKD</span>
+            </div>
+
+            <div class="input-group">
+                <label>Decimal Odds</label>
+                <input type="number" id="macau-odds" value="2.10" step="0.01" min="1.01">
+            </div>
+
+            <div class="input-group">
+                <label>投注金額 (HKD) — 已歸整</label>
+                <input type="number" id="macau-bet" class="auto-filled" step="1" min="1" placeholder="自動計算">
+            </div>
+
+            <div class="round-note" id="macau-round-note" style="display:none;">
+                四捨五入歸整：計算值 <strong id="macau-raw-val">—</strong> HKD → 取整 <strong id="macau-rounded-val">—</strong> HKD
+            </div>
+        </div>
+
+    </div>
+
+    <div class="results-panel">
+        <div class="result-grid">
+            <div class="result-item">
+                <div class="res-label">總投入 (Total Invest)</div>
+                <div class="res-value" id="res-invest">—</div>
+            </div>
+            <div class="result-item">
+                <div class="res-label">保證派彩 (Guaranteed Payout)</div>
+                <div class="res-value" id="res-payout">—</div>
+            </div>
+            <div class="result-item full-width highlight">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                    <div>
+                        <div class="res-label">淨利潤 (Net Profit)</div>
+                        <div class="res-value large" id="res-profit">—</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div class="res-label">套利回報率 (ROI)</div>
+                        <div class="res-value large" id="res-roi">—</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <p class="fx-footnote">* 所有結果以港幣 (HKD) 顯示。HKJC / Macau 投注額已四捨五入至最近 10 位。</p>
+
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+
+    // ─────────────────────────────────────────────
+    // POLYMARKET OFFICIAL FEE TABLE
+    // ─────────────────────────────────────────────
+    const FEE_TABLE = [
+        [0.01, 0.03], [0.05, 0.14], [0.10, 0.27], [0.15, 0.38],
+        [0.20, 0.48], [0.25, 0.56], [0.30, 0.63], [0.35, 0.68],
+        [0.40, 0.72], [0.45, 0.74], [0.50, 0.75], [0.55, 0.74],
+        [0.60, 0.72], [0.65, 0.68], [0.70, 0.63], [0.75, 0.56],
+        [0.80, 0.48], [0.85, 0.38], [0.90, 0.27], [0.95, 0.14],
+        [0.99, 0.03]
+    ];
+
+    function interpolateFeeRate(p) {
+        if (p <= FEE_TABLE[0][0]) return (FEE_TABLE[0][1] / FEE_TABLE[0][0]);
+        if (p >= FEE_TABLE[FEE_TABLE.length - 1][0]) return (FEE_TABLE[FEE_TABLE.length - 1][1] / FEE_TABLE[FEE_TABLE.length - 1][0]);
+        
+        for (let i = 0; i < FEE_TABLE.length - 1; i++) {
+            const [p0, f0] = FEE_TABLE[i];
+            const [p1, f1] = FEE_TABLE[i + 1];
+            if (p >= p0 && p <= p1) {
+                const t = (p - p0) / (p1 - p0);
+                const feePerHundred = f0 + t * (f1 - f0);
+                return feePerHundred / p;
+            }
+        }
+        return 0;
+    }
+
+    // 新增邏輯：判斷是否有勾選「免手續費」
+    const polyFreeFeeCheckbox = document.getElementById('poly-free-fee');
+
+    function getPolyNetOdds(cents) {
+        const p = cents / 100;
+        let feePct = 0;
+        let feePerHundred = 0;
+        let netOdds = 0;
+
+        if (polyFreeFeeCheckbox.checked) {
+            // 免手續費模式
+            feePct = 0;
+            feePerHundred = 0;
+            netOdds = 1 / p;
+        } else {
+            // 正常官方費率模式
+            feePct = interpolateFeeRate(p);            
+            feePerHundred = feePct * p;                  
+            netOdds  = 1 / (p * (1 + feePct / 100));    
+        }
+
+        document.getElementById('poly-fee-disp').textContent     = feePct.toFixed(3);
+        document.getElementById('poly-net-disp').textContent      = netOdds.toFixed(4);
+        document.getElementById('poly-fee-usd-disp').textContent  = '$' + feePerHundred.toFixed(4);
+
+        return netOdds;
+    }
+
+    // ─────────────────────────────────────────────
+    // 以下全部原封不動保留
+    // ─────────────────────────────────────────────
+
+    const modePhBtn  = document.getElementById('mode-ph');
+    const modeHmBtn  = document.getElementById('mode-hm');
+    const fxInput    = document.getElementById('fx-rate');
+
+    const cardPoly   = document.getElementById('card-poly');
+    const cardHkjc   = document.getElementById('card-hkjc');
+    const cardMacau  = document.getElementById('card-macau');
+
+    const polyCents  = document.getElementById('poly-cents');
+    const polyOdds   = document.getElementById('poly-odds');
+    const polyBet    = document.getElementById('poly-bet');
+    const polyShares = document.getElementById('poly-shares-disp');
+
+    const hkjcOdds   = document.getElementById('hkjc-odds');
+    const hkjcBet    = document.getElementById('hkjc-bet');
+    const hkjcRNote  = document.getElementById('hkjc-round-note');
+    const hkjcRawV   = document.getElementById('hkjc-raw-val');
+    const hkjcRndV   = document.getElementById('hkjc-rounded-val');
+
+    const macauOdds  = document.getElementById('macau-odds');
+    const macauBet   = document.getElementById('macau-bet');
+    const macauRNote = document.getElementById('macau-round-note');
+    const macauRawV  = document.getElementById('macau-raw-val');
+    const macauRndV  = document.getElementById('macau-rounded-val');
+
+    const resInvest  = document.getElementById('res-invest');
+    const resPayout  = document.getElementById('res-payout');
+    const resProfit  = document.getElementById('res-profit');
+    const resRoi     = document.getElementById('res-roi');
+
+    let mode       = 'poly-hkjc';
+    let activeSide = 'poly';
+
+    const fmt = v => v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    function setResult(invest, payout) {
+        const profit = payout - invest;
+        const roi    = invest > 0 ? (profit / invest) * 100 : 0;
+        resInvest.textContent = fmt(invest) + ' HKD';
+        resPayout.textContent = fmt(payout) + ' HKD';
+        resProfit.textContent = (profit >= 0 ? '+' : '') + fmt(profit) + ' HKD';
+        resProfit.className   = 'res-value large ' + (profit > 0 ? 'positive' : profit < 0 ? 'negative' : '');
+        resRoi.textContent    = (roi >= 0 ? '+' : '') + roi.toFixed(3) + '%';
+        resRoi.className      = 'res-value large ' + (roi > 0 ? 'positive' : roi < 0 ? 'negative' : '');
+    }
+
+    function clearResults() {
+        resInvest.textContent = '—';
+        resPayout.textContent = '—';
+        resProfit.textContent = '—';
+        resProfit.className   = 'res-value large';
+        resRoi.textContent    = '—';
+        resRoi.className      = 'res-value large';
+    }
+
+    function showRoundNote(noteEl, rawEl, rndEl, raw, rounded) {
+        const diff = Math.abs(raw - rounded);
+        if (diff < 0.005) {
+            noteEl.style.display = 'none';
+        } else {
+            noteEl.style.display = 'block';
+            rawEl.textContent = raw.toFixed(2);
+            rndEl.textContent = rounded.toFixed(0);
+        }
+    }
+
+    function setAutoField(input, value) {
+        input.value = value;
+        input.classList.add('auto-filled');
+    }
+
+    function setActiveField(input) {
+        input.classList.remove('auto-filled');
+    }
+
+    function calculate() {
+        const FX = parseFloat(fxInput.value);
+        if (isNaN(FX) || FX <= 0) return clearResults();
+
+        /* ===== POLY vs HKJC ===== */
+        if (mode === 'poly-hkjc') {
+            const cents = parseFloat(polyCents.value);
+            const hOdds = parseFloat(hkjcOdds.value);
+            if (isNaN(cents) || cents <= 0 || cents >= 100) return clearResults();
+            if (isNaN(hOdds) || hOdds <= 1) return clearResults();
+
+            const netOdds = getPolyNetOdds(cents);
+
+            if (activeSide === 'poly') {
+                const pUsd = parseFloat(polyBet.value);
+                if (isNaN(pUsd) || pUsd <= 0) return clearResults();
+
+                polyShares.textContent = (pUsd / (cents / 100)).toFixed(2);
+
+                const polyPayoutHkd  = pUsd * netOdds * FX;
+                const hkjcBetRaw     = polyPayoutHkd / hOdds;
+                const hkjcBetRounded = Math.round(hkjcBetRaw / 10) * 10;
+                setAutoField(hkjcBet, hkjcBetRounded);
+                showRoundNote(hkjcRNote, hkjcRawV, hkjcRndV, hkjcBetRaw, hkjcBetRounded);
+
+                const investHkd        = pUsd * FX + hkjcBetRounded;
+                const hkjcPayoutHkd    = hkjcBetRounded * hOdds;
+                const guaranteedPayout = Math.min(polyPayoutHkd, hkjcPayoutHkd);
+                setResult(investHkd, guaranteedPayout);
+
+            } else {
+                const hBet = parseFloat(hkjcBet.value);
+                if (isNaN(hBet) || hBet <= 0) return clearResults();
+
+                const hkjcPayoutHkd = hBet * hOdds;
+                const pUsd          = hkjcPayoutHkd / (netOdds * FX);
+                setAutoField(polyBet, pUsd.toFixed(2));
+
+                polyShares.textContent = (pUsd / (cents / 100)).toFixed(2);
+
+                const polyPayoutHkd    = pUsd * netOdds * FX;
+                const investHkd        = pUsd * FX + hBet;
+                const guaranteedPayout = Math.min(polyPayoutHkd, hkjcPayoutHkd);
+                setResult(investHkd, guaranteedPayout);
+                hkjcRNote.style.display = 'none';
+            }
+        }
+
+        /* ===== HKJC vs MACAU ===== */
+        else {
+            const hOdds = parseFloat(hkjcOdds.value);
+            const mOdds = parseFloat(macauOdds.value);
+            if (isNaN(hOdds) || hOdds <= 1) return clearResults();
+            if (isNaN(mOdds) || mOdds <= 1) return clearResults();
+
+            if (activeSide === 'hkjc2') {
+                const hBet = parseFloat(hkjcBet.value);
+                if (isNaN(hBet) || hBet <= 0) return clearResults();
+
+                const macauBetRaw     = (hBet * hOdds) / mOdds;
+                const macauBetRounded = Math.round(macauBetRaw / 10) * 10;
+                setAutoField(macauBet, macauBetRounded);
+                showRoundNote(macauRNote, macauRawV, macauRndV, macauBetRaw, macauBetRounded);
+
+                const investHkd        = hBet + macauBetRounded;
+                const payoutHkd1       = hBet * hOdds;
+                const payoutHkd2       = macauBetRounded * mOdds;
+                const guaranteedPayout = Math.min(payoutHkd1, payoutHkd2);
+                setResult(investHkd, guaranteedPayout);
+
+            } else {
+                const mBet = parseFloat(macauBet.value);
+                if (isNaN(mBet) || mBet <= 0) return clearResults();
+
+                const hkjcBetRaw     = (mBet * mOdds) / hOdds;
+                const hkjcBetRounded = Math.round(hkjcBetRaw / 10) * 10;
+                setAutoField(hkjcBet, hkjcBetRounded);
+                showRoundNote(hkjcRNote, hkjcRawV, hkjcRndV, hkjcBetRaw, hkjcBetRounded);
+
+                const investHkd        = hkjcBetRounded + mBet;
+                const payoutHkd1       = hkjcBetRounded * hOdds;
+                const payoutHkd2       = mBet * mOdds;
+                const guaranteedPayout = Math.min(payoutHkd1, payoutHkd2);
+                setResult(investHkd, guaranteedPayout);
+            }
+        }
+    }
+
+    function switchMode(m) {
+        mode = m;
+        if (m === 'poly-hkjc') {
+            modePhBtn.classList.add('active');
+            modeHmBtn.classList.remove('active');
+            cardPoly.style.display  = 'flex';
+            cardMacau.style.display = 'none';
+            activeSide = 'poly';
+            setActiveField(polyBet);
+            setAutoField(hkjcBet, '');
+            hkjcBet.placeholder = '自動計算';
+        } else {
+            modeHmBtn.classList.add('active');
+            modePhBtn.classList.remove('active');
+            cardPoly.style.display  = 'none';
+            cardMacau.style.display = 'flex';
+            activeSide = 'hkjc2';
+            setActiveField(hkjcBet);
+            setAutoField(macauBet, '');
+            hkjcBet.placeholder = '手動輸入';
+            macauBet.placeholder = '自動計算';
+        }
+        calculate();
+    }
+
+    modePhBtn.addEventListener('click', () => switchMode('poly-hkjc'));
+    modeHmBtn.addEventListener('click', () => switchMode('hkjc-macau'));
+    fxInput.addEventListener('input', calculate);
+
+    // 綁定免手續費勾選框事件
+    polyFreeFeeCheckbox.addEventListener('change', calculate);
+
+    polyCents.addEventListener('input', () => {
+        const v = parseFloat(polyCents.value);
+        if (v > 0 && v < 100) polyOdds.value = (100 / v).toFixed(2);
+        calculate();
+    });
+    polyOdds.addEventListener('input', () => {
+        const v = parseFloat(polyOdds.value);
+        if (v > 1) polyCents.value = (100 / v).toFixed(2);
+        calculate();
+    });
+
+    polyBet.addEventListener('focus', () => {
+        if (mode === 'poly-hkjc') {
+            activeSide = 'poly';
+            setActiveField(polyBet);
+            setAutoField(hkjcBet, hkjcBet.value);
+        }
+    });
+    polyBet.addEventListener('input', calculate);
+
+    hkjcBet.addEventListener('focus', () => {
+        if (mode === 'poly-hkjc') {
+            activeSide = 'hkjc';
+            setActiveField(hkjcBet);
+            setAutoField(polyBet, polyBet.value);
+        } else {
+            activeSide = 'hkjc2';
+            setActiveField(hkjcBet);
+            setAutoField(macauBet, macauBet.value);
+        }
+    });
+    hkjcBet.addEventListener('input', calculate);
+
+    macauBet.addEventListener('focus', () => {
+        activeSide = 'macau';
+        setActiveField(macauBet);
+        setAutoField(hkjcBet, hkjcBet.value);
+    });
+    macauBet.addEventListener('input', calculate);
+
+    hkjcOdds.addEventListener('input', calculate);
+    macauOdds.addEventListener('input', calculate);
+
+    calculate();
+});
+</script>
+</body>
+</html>
+```
