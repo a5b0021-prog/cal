@@ -4,6 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>套利對沖計算器</title>
+    
+    <!-- PWA 標籤補強 -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#f5f4f0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="套利計算器">
+    <link rel="apple-touch-icon" href="icon.png"> <!-- 給 iOS 使用的圖示 -->
+
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
 
@@ -411,6 +420,17 @@
 document.addEventListener("DOMContentLoaded", () => {
 
     // ─────────────────────────────────────────────
+    // 1. SERVICE WORKER 註冊 (核心 PWA 功能)
+    // ─────────────────────────────────────────────
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js')
+                .then(reg => console.log('SW 註冊成功!', reg))
+                .catch(err => console.log('SW 註冊失敗:', err));
+        });
+    }
+
+    // ─────────────────────────────────────────────
     // POLYMARKET OFFICIAL FEE TABLE
     // ─────────────────────────────────────────────
     const FEE_TABLE = [
@@ -440,7 +460,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const polyFreeFeeCheckbox = document.getElementById('poly-free-fee');
 
-    // 修改：回傳費率資訊，讓 calculate 能將手續費加進總成本
     function getPolyOddsData(cents) {
         const p = cents / 100;
         let feePct = 0;
@@ -464,7 +483,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // ─────────────────────────────────────────────
-    // 以下是主要計算邏輯
+    // 計算邏輯
     // ─────────────────────────────────────────────
 
     const modePhBtn  = document.getElementById('mode-ph');
@@ -548,72 +567,47 @@ document.addEventListener("DOMContentLoaded", () => {
         const FX = parseFloat(fxInput.value);
         if (isNaN(FX) || FX <= 0) return clearResults();
 
-        /* ===== POLY vs HKJC ===== */
         if (mode === 'poly-hkjc') {
             const cents = parseFloat(polyCents.value);
             const hOdds = parseFloat(hkjcOdds.value);
             if (isNaN(cents) || cents <= 0 || cents >= 100) return clearResults();
             if (isNaN(hOdds) || hOdds <= 1) return clearResults();
 
-            // 取得純賠率與手續費率
             const { rawOdds, feePct } = getPolyOddsData(cents);
 
             if (activeSide === 'poly') {
-                const pUsd = parseFloat(polyBet.value); // 此為不含手續費的純本金
+                const pUsd = parseFloat(polyBet.value); 
                 if (isNaN(pUsd) || pUsd <= 0) return clearResults();
-
                 polyShares.textContent = (pUsd / (cents / 100)).toFixed(2);
-                
-                // 計算需要額外支付的 Poly 手續費
                 const polyFeeUsd = pUsd * (feePct / 100);
                 polyFeeDisp.textContent = '$' + polyFeeUsd.toFixed(4);
-                
-                // Poly 的派彩完全由純本金決定
                 const polyPayoutHkd  = pUsd * rawOdds * FX;
-                
-                // HKJC 只需要對齊 Poly 的純派彩即可
                 const hkjcBetRaw     = polyPayoutHkd / hOdds;
                 const hkjcBetRounded = Math.round(hkjcBetRaw / 10) * 10;
                 setAutoField(hkjcBet, hkjcBetRounded);
                 showRoundNote(hkjcRNote, hkjcRawV, hkjcRndV, hkjcBetRaw, hkjcBetRounded);
-
-                // 核心修正：總投入成本必須加上 Poly 的手續費 (pUsd + polyFeeUsd)
                 const totalPolyCostUsd = pUsd + polyFeeUsd;
                 const investHkd        = (totalPolyCostUsd * FX) + hkjcBetRounded;
-                
                 const hkjcPayoutHkd    = hkjcBetRounded * hOdds;
                 const guaranteedPayout = Math.min(polyPayoutHkd, hkjcPayoutHkd);
-                
                 setResult(investHkd, guaranteedPayout);
-
             } else {
                 const hBet = parseFloat(hkjcBet.value);
                 if (isNaN(hBet) || hBet <= 0) return clearResults();
-
                 const hkjcPayoutHkd = hBet * hOdds;
-                
-                // Poly 算出需要多少純本金來匹配派彩
                 const pUsd          = hkjcPayoutHkd / (rawOdds * FX);
                 setAutoField(polyBet, pUsd.toFixed(2));
                 polyShares.textContent = (pUsd / (cents / 100)).toFixed(2);
-
-                // 計算手續費
                 const polyFeeUsd = pUsd * (feePct / 100);
                 polyFeeDisp.textContent = '$' + polyFeeUsd.toFixed(4);
-
                 const polyPayoutHkd    = pUsd * rawOdds * FX;
-                
-                // 同樣地，總成本必須加上這筆手續費
                 const totalPolyCostUsd = pUsd + polyFeeUsd;
                 const investHkd        = (totalPolyCostUsd * FX) + hBet;
-                
                 const guaranteedPayout = Math.min(polyPayoutHkd, hkjcPayoutHkd);
                 setResult(investHkd, guaranteedPayout);
                 hkjcRNote.style.display = 'none';
             }
         }
-
-        /* ===== HKJC vs MACAU ===== */
         else {
             const hOdds = parseFloat(hkjcOdds.value);
             const mOdds = parseFloat(macauOdds.value);
@@ -623,27 +617,22 @@ document.addEventListener("DOMContentLoaded", () => {
             if (activeSide === 'hkjc2') {
                 const hBet = parseFloat(hkjcBet.value);
                 if (isNaN(hBet) || hBet <= 0) return clearResults();
-
                 const macauBetRaw     = (hBet * hOdds) / mOdds;
                 const macauBetRounded = Math.round(macauBetRaw / 10) * 10;
                 setAutoField(macauBet, macauBetRounded);
                 showRoundNote(macauRNote, macauRawV, macauRndV, macauBetRaw, macauBetRounded);
-
                 const investHkd        = hBet + macauBetRounded;
                 const payoutHkd1       = hBet * hOdds;
                 const payoutHkd2       = macauBetRounded * mOdds;
                 const guaranteedPayout = Math.min(payoutHkd1, payoutHkd2);
                 setResult(investHkd, guaranteedPayout);
-
             } else {
                 const mBet = parseFloat(macauBet.value);
                 if (isNaN(mBet) || mBet <= 0) return clearResults();
-
                 const hkjcBetRaw     = (mBet * mOdds) / hOdds;
                 const hkjcBetRounded = Math.round(hkjcBetRaw / 10) * 10;
                 setAutoField(hkjcBet, hkjcBetRounded);
                 showRoundNote(hkjcRNote, hkjcRawV, hkjcRndV, hkjcBetRaw, hkjcBetRounded);
-
                 const investHkd        = hkjcBetRounded + mBet;
                 const payoutHkd1       = hkjcBetRounded * hOdds;
                 const payoutHkd2       = mBet * mOdds;
@@ -681,9 +670,7 @@ document.addEventListener("DOMContentLoaded", () => {
     modePhBtn.addEventListener('click', () => switchMode('poly-hkjc'));
     modeHmBtn.addEventListener('click', () => switchMode('hkjc-macau'));
     fxInput.addEventListener('input', calculate);
-
     polyFreeFeeCheckbox.addEventListener('change', calculate);
-
     polyCents.addEventListener('input', () => {
         const v = parseFloat(polyCents.value);
         if (v > 0 && v < 100) polyOdds.value = (100 / v).toFixed(2);
@@ -694,7 +681,6 @@ document.addEventListener("DOMContentLoaded", () => {
         if (v > 1) polyCents.value = (100 / v).toFixed(2);
         calculate();
     });
-
     polyBet.addEventListener('focus', () => {
         if (mode === 'poly-hkjc') {
             activeSide = 'poly';
@@ -703,7 +689,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
     polyBet.addEventListener('input', calculate);
-
     hkjcBet.addEventListener('focus', () => {
         if (mode === 'poly-hkjc') {
             activeSide = 'hkjc';
@@ -716,14 +701,12 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
     hkjcBet.addEventListener('input', calculate);
-
     macauBet.addEventListener('focus', () => {
         activeSide = 'macau';
         setActiveField(macauBet);
         setAutoField(hkjcBet, hkjcBet.value);
     });
     macauBet.addEventListener('input', calculate);
-
     hkjcOdds.addEventListener('input', calculate);
     macauOdds.addEventListener('input', calculate);
 
