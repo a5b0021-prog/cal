@@ -1,15 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-HK">
 <head>
-<link rel="manifest" href="manifest.json">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="apple-touch-icon" href="icon.png">
-<script>
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js');
-  }
-</script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>套利對沖計算器</title>
@@ -294,7 +285,7 @@
         </div>
         <div class="fx-box">
             <label>1 USD =</label>
-            <input type="number" id="fx-rate" value="7.775" step="0.01" min="1">
+            <input type="number" id="fx-rate" value="7.80" step="0.01" min="1">
             <label>HKD</label>
         </div>
     </div>
@@ -304,7 +295,6 @@
         <!-- POLY card -->
         <div id="card-poly" class="card poly">
             <div class="card-header">
-                <!-- 這裡加入了免手續費的勾選框 -->
                 <div style="display: flex; align-items: center; gap: 12px;">
                     <span class="platform-name">POLYMARKET</span>
                     <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; text-transform: none; margin: 0;">
@@ -332,13 +322,13 @@
                     <span>淨賠率：<strong id="poly-net-disp">0.0000</strong></span>
                 </div>
                 <div class="fee-row">
-                    <span>每 $100 手續費：<strong id="poly-fee-usd-disp">$0.00</strong> USD</span>
+                    <span>您的手續費：<strong id="poly-fee-usd-disp">$0.00</strong> USD</span>
                     <span>Shares：<strong id="poly-shares-disp">0.00</strong></span>
                 </div>
             </div>
 
             <div class="input-group">
-                <label>投注金額 (USD)</label>
+                <label>投注金額 (USD) — 不含手續費</label>
                 <input type="number" id="poly-bet" value="100" step="10" min="1">
             </div>
         </div>
@@ -392,7 +382,7 @@
     <div class="results-panel">
         <div class="result-grid">
             <div class="result-item">
-                <div class="res-label">總投入 (Total Invest)</div>
+                <div class="res-label">總投入成本 (Total Invest)</div>
                 <div class="res-value" id="res-invest">—</div>
             </div>
             <div class="result-item">
@@ -448,36 +438,33 @@ document.addEventListener("DOMContentLoaded", () => {
         return 0;
     }
 
-    // 新增邏輯：判斷是否有勾選「免手續費」
     const polyFreeFeeCheckbox = document.getElementById('poly-free-fee');
 
-    function getPolyNetOdds(cents) {
+    // 修改：回傳費率資訊，讓 calculate 能將手續費加進總成本
+    function getPolyOddsData(cents) {
         const p = cents / 100;
         let feePct = 0;
-        let feePerHundred = 0;
-        let netOdds = 0;
+        let displayNetOdds = 0;
 
         if (polyFreeFeeCheckbox.checked) {
-            // 免手續費模式
             feePct = 0;
-            feePerHundred = 0;
-            netOdds = 1 / p;
+            displayNetOdds = 1 / p;
         } else {
-            // 正常官方費率模式
             feePct = interpolateFeeRate(p);            
-            feePerHundred = feePct * p;                  
-            netOdds  = 1 / (p * (1 + feePct / 100));    
+            displayNetOdds  = 1 / (p * (1 + feePct / 100));    
         }
 
-        document.getElementById('poly-fee-disp').textContent     = feePct.toFixed(3);
-        document.getElementById('poly-net-disp').textContent      = netOdds.toFixed(4);
-        document.getElementById('poly-fee-usd-disp').textContent  = '$' + feePerHundred.toFixed(4);
+        document.getElementById('poly-fee-disp').textContent = feePct.toFixed(3);
+        document.getElementById('poly-net-disp').textContent = displayNetOdds.toFixed(4);
 
-        return netOdds;
+        return { 
+            rawOdds: 1 / p, 
+            feePct: feePct 
+        };
     }
 
     // ─────────────────────────────────────────────
-    // 以下全部原封不動保留
+    // 以下是主要計算邏輯
     // ─────────────────────────────────────────────
 
     const modePhBtn  = document.getElementById('mode-ph');
@@ -492,6 +479,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const polyOdds   = document.getElementById('poly-odds');
     const polyBet    = document.getElementById('poly-bet');
     const polyShares = document.getElementById('poly-shares-disp');
+    const polyFeeDisp = document.getElementById('poly-fee-usd-disp');
 
     const hkjcOdds   = document.getElementById('hkjc-odds');
     const hkjcBet    = document.getElementById('hkjc-bet');
@@ -533,6 +521,7 @@ document.addEventListener("DOMContentLoaded", () => {
         resProfit.className   = 'res-value large';
         resRoi.textContent    = '—';
         resRoi.className      = 'res-value large';
+        polyFeeDisp.textContent = '$0.00';
     }
 
     function showRoundNote(noteEl, rawEl, rndEl, raw, rounded) {
@@ -566,23 +555,35 @@ document.addEventListener("DOMContentLoaded", () => {
             if (isNaN(cents) || cents <= 0 || cents >= 100) return clearResults();
             if (isNaN(hOdds) || hOdds <= 1) return clearResults();
 
-            const netOdds = getPolyNetOdds(cents);
+            // 取得純賠率與手續費率
+            const { rawOdds, feePct } = getPolyOddsData(cents);
 
             if (activeSide === 'poly') {
-                const pUsd = parseFloat(polyBet.value);
+                const pUsd = parseFloat(polyBet.value); // 此為不含手續費的純本金
                 if (isNaN(pUsd) || pUsd <= 0) return clearResults();
 
                 polyShares.textContent = (pUsd / (cents / 100)).toFixed(2);
-
-                const polyPayoutHkd  = pUsd * netOdds * FX;
+                
+                // 計算需要額外支付的 Poly 手續費
+                const polyFeeUsd = pUsd * (feePct / 100);
+                polyFeeDisp.textContent = '$' + polyFeeUsd.toFixed(4);
+                
+                // Poly 的派彩完全由純本金決定
+                const polyPayoutHkd  = pUsd * rawOdds * FX;
+                
+                // HKJC 只需要對齊 Poly 的純派彩即可
                 const hkjcBetRaw     = polyPayoutHkd / hOdds;
                 const hkjcBetRounded = Math.round(hkjcBetRaw / 10) * 10;
                 setAutoField(hkjcBet, hkjcBetRounded);
                 showRoundNote(hkjcRNote, hkjcRawV, hkjcRndV, hkjcBetRaw, hkjcBetRounded);
 
-                const investHkd        = pUsd * FX + hkjcBetRounded;
+                // 核心修正：總投入成本必須加上 Poly 的手續費 (pUsd + polyFeeUsd)
+                const totalPolyCostUsd = pUsd + polyFeeUsd;
+                const investHkd        = (totalPolyCostUsd * FX) + hkjcBetRounded;
+                
                 const hkjcPayoutHkd    = hkjcBetRounded * hOdds;
                 const guaranteedPayout = Math.min(polyPayoutHkd, hkjcPayoutHkd);
+                
                 setResult(investHkd, guaranteedPayout);
 
             } else {
@@ -590,13 +591,22 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (isNaN(hBet) || hBet <= 0) return clearResults();
 
                 const hkjcPayoutHkd = hBet * hOdds;
-                const pUsd          = hkjcPayoutHkd / (netOdds * FX);
+                
+                // Poly 算出需要多少純本金來匹配派彩
+                const pUsd          = hkjcPayoutHkd / (rawOdds * FX);
                 setAutoField(polyBet, pUsd.toFixed(2));
-
                 polyShares.textContent = (pUsd / (cents / 100)).toFixed(2);
 
-                const polyPayoutHkd    = pUsd * netOdds * FX;
-                const investHkd        = pUsd * FX + hBet;
+                // 計算手續費
+                const polyFeeUsd = pUsd * (feePct / 100);
+                polyFeeDisp.textContent = '$' + polyFeeUsd.toFixed(4);
+
+                const polyPayoutHkd    = pUsd * rawOdds * FX;
+                
+                // 同樣地，總成本必須加上這筆手續費
+                const totalPolyCostUsd = pUsd + polyFeeUsd;
+                const investHkd        = (totalPolyCostUsd * FX) + hBet;
+                
                 const guaranteedPayout = Math.min(polyPayoutHkd, hkjcPayoutHkd);
                 setResult(investHkd, guaranteedPayout);
                 hkjcRNote.style.display = 'none';
@@ -672,7 +682,6 @@ document.addEventListener("DOMContentLoaded", () => {
     modeHmBtn.addEventListener('click', () => switchMode('hkjc-macau'));
     fxInput.addEventListener('input', calculate);
 
-    // 綁定免手續費勾選框事件
     polyFreeFeeCheckbox.addEventListener('change', calculate);
 
     polyCents.addEventListener('input', () => {
@@ -723,4 +732,3 @@ document.addEventListener("DOMContentLoaded", () => {
 </script>
 </body>
 </html>
-```
