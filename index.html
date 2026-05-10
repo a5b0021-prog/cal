@@ -5,13 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>套利對沖計算器</title>
     
-    <!-- PWA 標籤補強 -->
+    <!-- PWA & Mobile Optimization -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#f5f4f0">
-    <meta name="apple-mobile-web-app-capable" content="yes">
+    
+    <!-- 支援現代與傳統移動設備的 App 模式 -->
+    <meta name="mobile-web-app-capable" content="yes"> <!-- 現代標準 -->
+    <meta name="apple-mobile-web-app-capable" content="yes"> <!-- 舊版 iOS 兼容 -->
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="套利計算器">
-    <link rel="apple-touch-icon" href="icon.png"> <!-- 給 iOS 使用的圖示 -->
+    <link rel="apple-touch-icon" href="icon.png">
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
@@ -419,9 +422,7 @@
 <script>
 document.addEventListener("DOMContentLoaded", () => {
 
-    // ─────────────────────────────────────────────
-    // 1. SERVICE WORKER 註冊 (核心 PWA 功能)
-    // ─────────────────────────────────────────────
+    // 1. SERVICE WORKER 註冊
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
             navigator.serviceWorker.register('./sw.js')
@@ -445,7 +446,6 @@ document.addEventListener("DOMContentLoaded", () => {
     function interpolateFeeRate(p) {
         if (p <= FEE_TABLE[0][0]) return (FEE_TABLE[0][1] / FEE_TABLE[0][0]);
         if (p >= FEE_TABLE[FEE_TABLE.length - 1][0]) return (FEE_TABLE[FEE_TABLE.length - 1][1] / FEE_TABLE[FEE_TABLE.length - 1][0]);
-        
         for (let i = 0; i < FEE_TABLE.length - 1; i++) {
             const [p0, f0] = FEE_TABLE[i];
             const [p1, f1] = FEE_TABLE[i + 1];
@@ -464,7 +464,6 @@ document.addEventListener("DOMContentLoaded", () => {
         const p = cents / 100;
         let feePct = 0;
         let displayNetOdds = 0;
-
         if (polyFreeFeeCheckbox.checked) {
             feePct = 0;
             displayNetOdds = 1 / p;
@@ -472,46 +471,32 @@ document.addEventListener("DOMContentLoaded", () => {
             feePct = interpolateFeeRate(p);            
             displayNetOdds  = 1 / (p * (1 + feePct / 100));    
         }
-
         document.getElementById('poly-fee-disp').textContent = feePct.toFixed(3);
         document.getElementById('poly-net-disp').textContent = displayNetOdds.toFixed(4);
-
-        return { 
-            rawOdds: 1 / p, 
-            feePct: feePct 
-        };
+        return { rawOdds: 1 / p, feePct: feePct };
     }
-
-    // ─────────────────────────────────────────────
-    // 計算邏輯
-    // ─────────────────────────────────────────────
 
     const modePhBtn  = document.getElementById('mode-ph');
     const modeHmBtn  = document.getElementById('mode-hm');
     const fxInput    = document.getElementById('fx-rate');
-
     const cardPoly   = document.getElementById('card-poly');
     const cardHkjc   = document.getElementById('card-hkjc');
     const cardMacau  = document.getElementById('card-macau');
-
     const polyCents  = document.getElementById('poly-cents');
     const polyOdds   = document.getElementById('poly-odds');
     const polyBet    = document.getElementById('poly-bet');
     const polyShares = document.getElementById('poly-shares-disp');
     const polyFeeDisp = document.getElementById('poly-fee-usd-disp');
-
     const hkjcOdds   = document.getElementById('hkjc-odds');
     const hkjcBet    = document.getElementById('hkjc-bet');
     const hkjcRNote  = document.getElementById('hkjc-round-note');
     const hkjcRawV   = document.getElementById('hkjc-raw-val');
     const hkjcRndV   = document.getElementById('hkjc-rounded-val');
-
     const macauOdds  = document.getElementById('macau-odds');
     const macauBet   = document.getElementById('macau-bet');
     const macauRNote = document.getElementById('macau-round-note');
     const macauRawV  = document.getElementById('macau-raw-val');
     const macauRndV  = document.getElementById('macau-rounded-val');
-
     const resInvest  = document.getElementById('res-invest');
     const resPayout  = document.getElementById('res-payout');
     const resProfit  = document.getElementById('res-profit');
@@ -545,9 +530,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function showRoundNote(noteEl, rawEl, rndEl, raw, rounded) {
         const diff = Math.abs(raw - rounded);
-        if (diff < 0.005) {
-            noteEl.style.display = 'none';
-        } else {
+        if (diff < 0.005) { noteEl.style.display = 'none'; } 
+        else {
             noteEl.style.display = 'block';
             rawEl.textContent = raw.toFixed(2);
             rndEl.textContent = rounded.toFixed(0);
@@ -559,9 +543,7 @@ document.addEventListener("DOMContentLoaded", () => {
         input.classList.add('auto-filled');
     }
 
-    function setActiveField(input) {
-        input.classList.remove('auto-filled');
-    }
+    function setActiveField(input) { input.classList.remove('auto-filled'); }
 
     function calculate() {
         const FX = parseFloat(fxInput.value);
@@ -572,7 +554,6 @@ document.addEventListener("DOMContentLoaded", () => {
             const hOdds = parseFloat(hkjcOdds.value);
             if (isNaN(cents) || cents <= 0 || cents >= 100) return clearResults();
             if (isNaN(hOdds) || hOdds <= 1) return clearResults();
-
             const { rawOdds, feePct } = getPolyOddsData(cents);
 
             if (activeSide === 'poly') {
@@ -607,13 +588,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 setResult(investHkd, guaranteedPayout);
                 hkjcRNote.style.display = 'none';
             }
-        }
-        else {
+        } else {
             const hOdds = parseFloat(hkjcOdds.value);
             const mOdds = parseFloat(macauOdds.value);
             if (isNaN(hOdds) || hOdds <= 1) return clearResults();
             if (isNaN(mOdds) || mOdds <= 1) return clearResults();
-
             if (activeSide === 'hkjc2') {
                 const hBet = parseFloat(hkjcBet.value);
                 if (isNaN(hBet) || hBet <= 0) return clearResults();
@@ -682,34 +661,18 @@ document.addEventListener("DOMContentLoaded", () => {
         calculate();
     });
     polyBet.addEventListener('focus', () => {
-        if (mode === 'poly-hkjc') {
-            activeSide = 'poly';
-            setActiveField(polyBet);
-            setAutoField(hkjcBet, hkjcBet.value);
-        }
+        if (mode === 'poly-hkjc') { activeSide = 'poly'; setActiveField(polyBet); setAutoField(hkjcBet, hkjcBet.value); }
     });
     polyBet.addEventListener('input', calculate);
     hkjcBet.addEventListener('focus', () => {
-        if (mode === 'poly-hkjc') {
-            activeSide = 'hkjc';
-            setActiveField(hkjcBet);
-            setAutoField(polyBet, polyBet.value);
-        } else {
-            activeSide = 'hkjc2';
-            setActiveField(hkjcBet);
-            setAutoField(macauBet, macauBet.value);
-        }
+        if (mode === 'poly-hkjc') { activeSide = 'hkjc'; setActiveField(hkjcBet); setAutoField(polyBet, polyBet.value); } 
+        else { activeSide = 'hkjc2'; setActiveField(hkjcBet); setAutoField(macauBet, macauBet.value); }
     });
     hkjcBet.addEventListener('input', calculate);
-    macauBet.addEventListener('focus', () => {
-        activeSide = 'macau';
-        setActiveField(macauBet);
-        setAutoField(hkjcBet, hkjcBet.value);
-    });
+    macauBet.addEventListener('focus', () => { activeSide = 'macau'; setActiveField(macauBet); setAutoField(hkjcBet, hkjcBet.value); });
     macauBet.addEventListener('input', calculate);
     hkjcOdds.addEventListener('input', calculate);
     macauOdds.addEventListener('input', calculate);
-
     calculate();
 });
 </script>
